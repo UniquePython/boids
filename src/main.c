@@ -28,11 +28,11 @@ typedef struct s_boid
 
 // --- PROTOTYPES ------------>
 
-float Length(Vec2);
-Vec2 Add(Vec2, Vec2);
-Vec2 Sub(Vec2, Vec2);
-Vec2 Scale(Vec2, float);
-Vec2 Normalize(Vec2);
+float Vec2Length(Vec2);
+Vec2 Vec2Add(Vec2, Vec2);
+Vec2 Vec2Sub(Vec2, Vec2);
+Vec2 Vec2Scale(Vec2, float);
+Vec2 Vec2Normalize(Vec2);
 
 void InitBoids(void);
 void Separation(void);
@@ -73,36 +73,51 @@ int main(void)
 
 // --- IMPLEMENTATIONS ------------>
 
-float Length(Vec2 v)
+float Vec2Length(Vec2 v)
 {
 	return sqrtf(v.x*v.x + v.y*v.y);
 }
 
-Vec2 Add(Vec2 a, Vec2 b)
+Vec2 Vec2Add(Vec2 a, Vec2 b)
 {
 	return (Vec2){ a.x + b.x, a.y + b.y };
 }
 
-Vec2 Sub(Vec2 a, Vec2 b)
+Vec2 Vec2Sub(Vec2 a, Vec2 b)
 {
 	return (Vec2){ a.x - b.x, a.y - b.y };
 }
 
-Vec2 Scale(Vec2 v, float s)
+Vec2 Vec2Scale(Vec2 v, float s)
 {
 	return (Vec2){ v.x * s, v.y * s };
 }
 
-Vec2 Normalize(Vec2 v)
+Vec2 Vec2Normalize(Vec2 v)
 {
-	float len = Length(v);
+	float len = Vec2Length(v);
     if (len == 0) return (Vec2){0, 0};
-    return Scale(v, 1.0f / len);
+    return Vec2Scale(v, 1.0f / len);
 }
 
 void InitBoids(void)
 {
-	return;
+	srand(time(NULL));
+
+    for (int i = 0; i < NBOIDS; i++)
+    {
+        boids[i].position = (Vec2){
+            rand() % WIDTH,
+            rand() % HEIGHT
+        };
+
+        boids[i].velocity = (Vec2){
+            ((float)rand() / RAND_MAX) * 2 - 1,
+            ((float)rand() / RAND_MAX) * 2 - 1
+        };
+
+        boids[i].radius = 4.0f;
+    }
 }
 
 void Separation(void)
@@ -122,5 +137,19 @@ void Cohesion(void)
 
 void DrawBoids(void)
 {
-	return;
+	for (int i = 0; i < NBOIDS; i++)
+    {
+        boids[i].position = Vec2Add(boids[i].position, boids[i].velocity);
+
+        if (boids[i].position.x < 0) boids[i].position.x = WIDTH;
+        if (boids[i].position.y < 0) boids[i].position.y = HEIGHT;
+        if (boids[i].position.x > WIDTH) boids[i].position.x = 0;
+        if (boids[i].position.y > HEIGHT) boids[i].position.y = 0;
+
+        DrawCircleV(
+            (Vector2){ boids[i].position.x, boids[i].position.y },
+            boids[i].radius,
+            WHITE
+        );
+    }
 }
