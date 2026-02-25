@@ -28,6 +28,12 @@ typedef struct s_boid
 
 // --- PROTOTYPES ------------>
 
+float Length(Vec2);
+Vec2 Add(Vec2, Vec2);
+Vec2 Sub(Vec2, Vec2);
+Vec2 Scale(Vec2, float);
+Vec2 Normalize(Vec2);
+
 void InitBoids(void);
 void Separation(void);
 void Alignment(void);
@@ -44,11 +50,12 @@ int main(void)
 	InitWindow(WIDTH, HEIGHT, "Boids");
     SetTargetFPS(FPS);
 
+	InitBoids();
+
 	while (!WindowShouldClose())
     {
 		BeginDrawing();
 			ClearBackground(BLACK);
-			InitBoids();
 
 			Separation();
 			Alignment();
@@ -65,6 +72,33 @@ int main(void)
 
 
 // --- IMPLEMENTATIONS ------------>
+
+float Length(Vec2 v)
+{
+	return sqrtf(v.x*v.x + v.y*v.y);
+}
+
+Vec2 Add(Vec2 a, Vec2 b)
+{
+	return (Vec2){ a.x + b.x, a.y + b.y };
+}
+
+Vec2 Sub(Vec2 a, Vec2 b)
+{
+	return (Vec2){ a.x - b.x, a.y - b.y };
+}
+
+Vec2 Scale(Vec2 v, float s)
+{
+	return (Vec2){ v.x * s, v.y * s };
+}
+
+Vec2 Normalize(Vec2 v)
+{
+	float len = Length(v);
+    if (len == 0) return (Vec2){0, 0};
+    return Scale(v, 1.0f / len);
+}
 
 void InitBoids(void)
 {
