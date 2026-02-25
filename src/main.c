@@ -11,6 +11,7 @@
 #define FPS 60
 
 #define NBOIDS 200
+#define NPREDATORS ((NBOIDS) / 10)
 
 #define SEP_RADIUS 25.0f
 #define ALI_RADIUS 50.0f
@@ -23,6 +24,13 @@
 #define MAX_SPEED 2.5f
 #define MAX_TURN 0.04f
 
+#define MAX_PRED_SPEED 3.0f
+#define FLEE_RADIUS 100.0f
+#define FLEE_WEIGHT 4.0f
+#define EAT_RADIUS 6.0f
+
+#define PRED_CHASE_RADIUS 200.0f
+
 #define FOV_DEGREES 270.0f
 #define FOV_COS (cosf((FOV_DEGREES * DEG2RAD) * 0.5f))
 
@@ -34,10 +42,13 @@ typedef struct s_vec2
 	float x, y;
 } Vec2;
 
+typedef enum { PREY, PREDATOR } BoidType;
+
 typedef struct s_boid
 {
 	Vec2 position, velocity;
 	float radius;
+	BoidType type;
 } Boid;
 
 
@@ -53,10 +64,12 @@ void InitBoids(void);
 Vec2 SeparationForce(int);
 Vec2 AlignmentForce(int);
 Vec2 CohesionForce(int);
+Vec2 FleeForce(int);
+Vec2 ChaseForce(int);
+void EatBoids(void);
 void UpdateBoids(void);
 void DrawBoids(void);
 
-void LimitSpeed(Boid*);
 void LimitTurn(Boid*, Vec2);
 int IsVisible(int, int, float);
 Vec2 ForwardBias(int);
@@ -75,6 +88,7 @@ int main(void)
 
 	while (!WindowShouldClose())
     {
+		EatBoids();
 		BeginDrawing();
 			ClearBackground(BLACK);
 			UpdateBoids();
@@ -119,7 +133,7 @@ Vec2 Vec2Normalize(Vec2 v)
 
 void InitBoids(void)
 {
-	srand(time(NULL));
+    srand(time(NULL));
 
     for (int i = 0; i < NBOIDS; i++)
     {
@@ -133,7 +147,8 @@ void InitBoids(void)
             ((float)rand() / RAND_MAX) * 2 - 1
         };
 
-        boids[i].radius = 4.0f;
+        boids[i].type   = (i < NPREDATORS) ? PREDATOR : PREY;
+        boids[i].radius = (i < NPREDATORS) ? 5.0f : 4.0f;
     }
 }
 
@@ -208,19 +223,104 @@ Vec2 CohesionForce(int i)
     return Vec2Scale(Vec2Normalize(toCenter), strength);
 }
 
+Vec2 FleeForce(int i)
+{
+    Vec2 force = {0, 0};
+
+    for (int j = 0; j < NBOIDS; j++)
+    {
+        if (boids[j].type != PREDATOR) continue;
+
+        Vec2 diff = Vec2Sub(boids[i].position, boids[j].position);
+        float d = Vec2Length(diff);
+
+        if (d > 0 && d < FLEE_RADIUS)
+            force = Vec2Add(force, Vec2Scale(Vec2Normalize(diff), (FLEE_RADIUS - d) / FLEE_RADIUS));
+    }
+
+    return force;
+}
+
+Vec2 ChaseForce(int i)
+{
+    Vec2 closest = {0, 0};
+    float minDist = PRED_CHASE_RADIUS;
+    int found = 0;
+
+    for (int j = 0; j < NBOIDS; j++)
+    {
+        if (boids[j].type != PREY) continue;
+
+        Vec2 diff = Vec2Sub(boids[j].position, boids[i].position);
+        float d = Vec2Length(diff);
+
+        if (d < minDist)
+        {
+            minDist = d;
+            closest = diff;
+            found = 1;
+        }
+    }
+
+    if (!found) return (Vec2){0, 0};
+
+    return Vec2Normalize(closest);
+}
+
+void EatBoids(void)
+{
+    for (int i = 0; i < NBOIDS; i++)
+    {
+        if (boids[i].type != PREDATOR) continue;
+
+        for (int j = 0; j < NBOIDS; j++)
+        {
+            if (boids[j].type != PREY) continue;
+
+            Vec2 diff = Vec2Sub(boids[i].position, boids[j].position);
+            float d = Vec2Length(diff);
+
+            if (d < EAT_RADIUS)
+            {
+                // Respawn prey at random location
+                boids[j].position = (Vec2){
+                    rand() % WIDTH,
+                    rand() % HEIGHT
+                };
+                boids[j].velocity = (Vec2){
+                    ((float)rand() / RAND_MAX) * 2 - 1,
+                    ((float)rand() / RAND_MAX) * 2 - 1
+                };
+            }
+        }
+    }
+}
+
 void UpdateBoids(void)
 {
     for (int i = 0; i < NBOIDS; i++)
     {
         Vec2 desired = boids[i].velocity;
 
-        desired = Vec2Add(desired, Vec2Scale(SeparationForce(i), SEP_WEIGHT));
-        desired = Vec2Add(desired, Vec2Scale(AlignmentForce(i), ALI_WEIGHT));
-        desired = Vec2Add(desired, Vec2Scale(CohesionForce(i), COH_WEIGHT));
-        desired = Vec2Add(desired, ForwardBias(i));
+        if (boids[i].type == PREDATOR)
+        {
+            desired = Vec2Add(desired, ChaseForce(i));
+        }
+        else
+        {
+            desired = Vec2Add(desired, Vec2Scale(SeparationForce(i), SEP_WEIGHT));
+            desired = Vec2Add(desired, Vec2Scale(AlignmentForce(i), ALI_WEIGHT));
+            desired = Vec2Add(desired, Vec2Scale(CohesionForce(i), COH_WEIGHT));
+            desired = Vec2Add(desired, ForwardBias(i));
+            desired = Vec2Add(desired, Vec2Scale(FleeForce(i), FLEE_WEIGHT));
+        }
 
         LimitTurn(&boids[i], desired);
-        LimitSpeed(&boids[i]);
+
+        float maxSpd = (boids[i].type == PREDATOR) ? MAX_PRED_SPEED : MAX_SPEED;
+        float speed = Vec2Length(boids[i].velocity);
+        if (speed > maxSpd)
+            boids[i].velocity = Vec2Scale(Vec2Normalize(boids[i].velocity), maxSpd);
 
         boids[i].position = Vec2Add(boids[i].position, boids[i].velocity);
 
@@ -259,15 +359,10 @@ void DrawBoids(void)
             cy + sinf(angle - 2.5f) * size
         };
 
-        DrawTriangle(tip, right, left, WHITE);
+		Color c = (boids[i].type == PREDATOR) ? RED : GREEN;
+        DrawTriangle(tip, right, left, c);
 		DrawTriangleLines(tip, right, left, GRAY);
     }
-}
-
-void LimitSpeed(Boid* b)
-{
-    float speed = Vec2Length(b->velocity);
-    if (speed > MAX_SPEED) b->velocity = Vec2Scale(Vec2Normalize(b->velocity), MAX_SPEED);
 }
 
 void LimitTurn(Boid* b, Vec2 desired)
